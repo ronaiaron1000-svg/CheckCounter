@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CheckCounter</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #1c1a3d;
+    --panel: #2b2863;
+    --ink: #f5f3ff;
+    --muted: #b6b1e6;
+    --accent: #ffd23f;
+    --accent-ink: #2a1f00;
+    --pink: #ff6fa5;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    font-family: "Fredoka", system-ui, -apple-system, "Segoe UI", sans-serif;
+    background:
+      radial-gradient(circle at 20% 15%, #3a3590 0%, transparent 45%),
+      radial-gradient(circle at 85% 90%, #5a2a73 0%, transparent 40%),
+      var(--bg);
+    color: var(--ink);
+    display: grid;
+    place-items: center;
+    padding: 24px;
+  }
+  main {
+    width: min(100%, 460px);
+    background: var(--panel);
+    border-radius: 32px;
+    padding: 40px 28px 36px;
+    text-align: center;
+    box-shadow: 0 0 0 4px rgba(255,255,255,.06), 0 24px 60px rgba(0,0,0,.4);
+  }
+  h1 {
+    margin: 0 0 28px;
+    font-size: 1.1rem;
+    font-weight: 600;
+    letter-spacing: .04em;
+    color: var(--muted);
+  }
+  .line { font-size: 1.35rem; margin: 0; line-height: 1.3; }
+  .count {
+    display: block;
+    font-size: clamp(5rem, 28vw, 8rem);
+    font-weight: 700;
+    line-height: 1;
+    margin: 10px 0 6px;
+    color: var(--accent);
+    font-variant-numeric: tabular-nums;
+  }
+  .count.bump { animation: bump .28s ease-out; }
+  @keyframes bump {
+    0% { transform: scale(1); }
+    40% { transform: scale(1.18) rotate(-2deg); color: var(--pink); }
+    100% { transform: scale(1); }
+  }
+  button {
+    margin-top: 28px;
+    width: 96px;
+    height: 96px;
+    border: 0;
+    border-radius: 50%;
+    background: var(--accent);
+    color: var(--accent-ink);
+    font: 700 3.4rem/1 "Fredoka", system-ui, sans-serif;
+    cursor: pointer;
+    box-shadow: 0 8px 0 #c79a00, 0 14px 24px rgba(0,0,0,.35);
+    transition: transform .08s ease, box-shadow .08s ease;
+    -webkit-tap-highlight-color: transparent;
+  }
+  button:active {
+    transform: translateY(6px);
+    box-shadow: 0 2px 0 #c79a00, 0 6px 12px rgba(0,0,0,.35);
+  }
+  button:focus-visible { outline: 4px solid var(--ink); outline-offset: 4px; }
+  @media (prefers-reduced-motion: reduce) {
+    .count.bump { animation: none; }
+    button { transition: none; }
+  }
+</style>
+</head>
+<body>
+  <main>
+    <h1>CheckCounter</h1>
+    <p class="line">Emma checked my profile</p>
+    <span class="count" id="count" aria-live="polite">0</span>
+    <p class="line" id="times">times.</p>
+    <button id="plus" type="button" aria-label="Add one check">+</button>
+  </main>
+
+<script>
+  // Ide másold be a Firebase Realtime Database URL-t (lásd az útmutatót).
+  // Ha üres marad, a szám csak az adott böngészőben mentődik.
+  var DB_URL = "https://checkcounter-eace6-default-rtdb.europe-west1.firebasedatabase.app/";
+
+  var KEY = "checkcounter:emma";
+  var countEl = document.getElementById("count");
+  var timesEl = document.getElementById("times");
+  var count = 0;
+  var online = DB_URL.trim() !== "";
+  var remote = DB_URL.replace(/\/+$/, "") + "/count.json";
+
+  function load() {
+    try {
+      var saved = parseInt(localStorage.getItem(KEY), 10);
+      return isNaN(saved) || saved < 0 ? 0 : saved;
+    } catch (e) { return 0; }
+  }
+
+  function save() {
+    try { localStorage.setItem(KEY, String(count)); } catch (e) {}
+  }
+
+  function render() {
+    countEl.textContent = count;
+    timesEl.textContent = count === 1 ? "time." : "times.";
+  }
+
+  function pull() {
+    if (!online) return;
+    fetch(remote)
+      .then(function (r) { return r.json(); })
+      .then(function (v) {
+        if (typeof v === "number" && v !== count) { count = v; save(); render(); }
+      })
+      .catch(function () {});
+  }
+
+  document.getElementById("plus").addEventListener("click", function () {
+    count += 1;
+    save();
+    render();
+    countEl.classList.remove("bump");
+    void countEl.offsetWidth;
+    countEl.classList.add("bump");
+    if (online) {
+      // a szerver növeli eggyel, így két egyszerre nyomkodó sem írja felül egymást
+      fetch(remote, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ".sv": { "increment": 1 } })
+      }).then(pull).catch(function () {});
+    }
+  });
+
+  window.addEventListener("storage", function (e) {
+    if (e.key === KEY) { count = load(); render(); }
+  });
+  document.addEventListener("visibilitychange", function () {
+    if (!document.hidden) pull();
+  });
+
+  count = load();
+  render();
+  pull();
+  setInterval(pull, 5000);
+</script>
+</body>
+</html>
